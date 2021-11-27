@@ -29,6 +29,30 @@ app.MapGet("/items/{id}", ([FromServices] ItemRepository items, int id) =>
     return item == null ? Results.NotFound() : Results.Ok(item);
 });
 
+app.MapPut("/items/{id}", ([FromServices] ItemRepository items, int id, Item item) =>
+{
+    if (items.GetById(id) == null)
+    {
+        return Results.NotFound();
+    }
+
+    items.Update(item);
+
+    return Results.Ok(item);
+});
+
+app.MapDelete("/items/{id}", ([FromServices] ItemRepository items, int id) =>
+{
+    if (items.GetById(id) == null)
+    {
+        return Results.NotFound();
+    }
+
+    items.Delete(id);
+
+    return Results.NoContent();
+});
+
 app.MapGet("/", () => "Hello from Minimal API");
 app.Run();
 

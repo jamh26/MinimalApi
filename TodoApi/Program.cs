@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -8,54 +7,58 @@ var connectionString = builder.Configuration["ConnectionStrings:DefaultConnectio
 builder.Services.AddDbContext<ApiDbContext>(options =>
     options.UseSqlite(connectionString));
 
-builder.Services.AddSingleton<ItemRepository>();
-
 var app = builder.Build();
 
-app.MapGet("/items", ([FromServices] ItemRepository items) =>
+app.MapGet("/items", async (ApiDbContext db) =>
 {
-    return items.GetAll();
+    return await db.Items.ToListAsync();
 });
 
-app.MapPost("/items", ([FromServices] ItemRepository items, Item item) =>
+app.MapPost("/items", async (ApiDbContext db, Item item) =>
 {
-    if (items.GetById(item.id) != null)
+    if (await db.Items.FirstOrDefaultAsync(x => x.Id == item.Id) != null)
     {
         return Results.BadRequest();
     }
 
-    items.Add(item);
+    db.Items.Add(item);
+    await db.SaveChangesAsync();
 
-    return Results.Created($"/Items/{item.id}", item);
+    return Results.Created($"/Items/{item.Id}", item);
 });
 
-app.MapGet("/items/{id}", ([FromServices] ItemRepository items, int id) =>
+app.MapGet("/items/{id}", async (ApiDbContext db, int id) =>
 {
-    var item = items.GetById(id);
+    var item = await db.Items.FirstOrDefaultAsync(x => x.Id == id);
 
     return item == null ? Results.NotFound() : Results.Ok(item);
 });
 
-app.MapPut("/items/{id}", ([FromServices] ItemRepository items, int id, Item item) =>
+app.MapPut("/items/{id}", async (ApiDbContext db, int id, Item item) =>
 {
-    if (items.GetById(id) == null)
+    var existItem = await db.Items.FirstOrDefaultAsync(x => x.Id == id);
+    if (existItem == null)
     {
         return Results.NotFound();
     }
 
-    items.Update(item);
+    existItem.Title = item.Title;
+    existItem.IsCompleted = item.IsCompleted;
 
+    await db.SaveChangesAsync();
     return Results.Ok(item);
 });
 
-app.MapDelete("/items/{id}", ([FromServices] ItemRepository items, int id) =>
+app.MapDelete("/items/{id}", async (ApiDbContext db, int id) =>
 {
-    if (items.GetById(id) == null)
+    var item = await db.Items.FirstOrDefaultAsync(x => x.Id == id);
+    if (item == null)
     {
         return Results.NotFound();
     }
 
-    items.Delete(id);
+    db.Items.Remove(item);
+    await db.SaveChangesAsync();
 
     return Results.NoContent();
 });
@@ -63,37 +66,11 @@ app.MapDelete("/items/{id}", ([FromServices] ItemRepository items, int id) =>
 app.MapGet("/", () => "Hello from Minimal API");
 app.Run();
 
-record Item(int id, string title, bool IsCompleted);
-
-class ItemRepository
+class Item
 {
-    private Dictionary<int, Item> items = new Dictionary<int, Item>();
-
-    public ItemRepository()
-    {
-        var item1 = new Item(1, "Go to the gym", false);
-        var item2 = new Item(2, "drink water", true);
-        var item3 = new Item(3, "watch tv", false);
-        var item4 = new Item(4, "read book", false);
-
-        items.Add(item1.id, item1);
-        items.Add(item2.id, item2);
-        items.Add(item3.id, item3);
-        items.Add(item4.id, item4);
-    }
-
-    public IEnumerable<Item> GetAll() => items.Values;
-    public Item GetById(int id)
-    {
-        if (items.ContainsKey(id))
-        {
-            return items[id];
-        }
-        return null;
-    }
-    public void Add(Item item) => items.Add(item.id, item);
-    public void Update(Item item) => items[item.id] = item;
-    public void Delete(int id) => items.Remove(id);
+    public int Id { get; set; }
+    public string Title { get; set; }
+    public bool IsCompleted { get; set; }
 }
 
 class ApiDbContext : DbContext
@@ -102,6 +79,5 @@ class ApiDbContext : DbContext
 
     public ApiDbContext(DbContextOptions<ApiDbContext> options) : base(options)
     {
-
     }
 }

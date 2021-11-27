@@ -1,43 +1,66 @@
-var builder = WebApplication.CreateBuilder(args);
+using Microsoft.AspNetCore.Mvc;
 
-// Add services to the container.
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddSingleton<ItemRepository>();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+app.MapGet("/items", ([FromServices] ItemRepository items) =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+    return items.GetAll();
+});
 
-app.UseHttpsRedirection();
-
-var summaries = new[]
+app.MapPost("/items", ([FromServices] ItemRepository items, Item item) =>
 {
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+    if (items.GetById(item.id) != null)
+    {
+        return Results.BadRequest();
+    }
 
-app.MapGet("/weatherforecast", () =>
+    items.Add(item);
+
+    return Results.Created($"/Items/{item.id}", item);
+});
+
+app.MapGet("/items/{id}", ([FromServices] ItemRepository items, int id) =>
 {
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateTime.Now.AddDays(index),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
+    var item = items.GetById(id);
 
+    return item == null ? Results.NotFound() : Results.Ok(item);
+});
+
+app.MapGet("/", () => "Hello from Minimal API");
 app.Run();
 
-record WeatherForecast(DateTime Date, int TemperatureC, string? Summary)
+record Item(int id, string title, bool IsCompleted);
+
+class ItemRepository
 {
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
+    private Dictionary<int, Item> items = new Dictionary<int, Item>();
+
+    public ItemRepository()
+    {
+        var item1 = new Item(1, "Go to the gym", false);
+        var item2 = new Item(2, "drink water", true);
+        var item3 = new Item(3, "watch tv", false);
+        var item4 = new Item(4, "read book", false);
+
+        items.Add(item1.id, item1);
+        items.Add(item2.id, item2);
+        items.Add(item3.id, item3);
+        items.Add(item4.id, item4);
+    }
+
+    public IEnumerable<Item> GetAll() => items.Values;
+    public Item GetById(int id)
+    {
+        if (items.ContainsKey(id))
+        {
+            return items[id];
+        }
+        return null;
+    }
+    public void Add(Item item) => items.Add(item.id, item);
+    public void Update(Item item) => items[item.id] = item;
+    public void Delete(int id) => items.Remove(id);
 }
